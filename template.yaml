@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sample SAM App
+Mappings:
+  Consts:
+    Default:
+      EndPoint1: http://localhost:14566
+      EndPoint2: http://localstack:4566
+Globals:
+  Function:
+    Handler: app.handler
+    Runtime: python3.9
+    Timeout: 180
+    Architectures:
+      - x86_64
+
+Resources:
+  HelloWorldApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Description: Hello World REST API
+      StageName: test
+
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/hello_world
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+            RestApiId:
+              Ref: HelloWorldApi
+
+Outputs:
+  HelloWorldApiUrl1:
+    Value:
+      Fn::Sub:
+        - "${EndPoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
+        - EndPoint:
+            Fn::FindInMap:
+              - Consts
+              - Default
+              - EndPoint1
+  HelloWorldApiUrl2:
+    Value:
+      Fn::Sub:
+        - "${EndPoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
+        - EndPoint:
+            Fn::FindInMap:
+              - Consts
+              - Default
+              - EndPoint2
