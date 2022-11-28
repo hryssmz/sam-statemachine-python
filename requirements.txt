@@ -1,0 +1,9 @@
+aws-lambda-typing
+aws-sam-cli-local
+black
+boto3
+flake8
+isort
+jmespath
+mypy
+types-jmespath

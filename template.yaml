@@ -1,55 +1,159 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Sample SAM App
-Mappings:
-  Consts:
+
+Parameters:
+  Endpoint:
+    Type: String
+    Default: ""
+
+  ApigwEndpoint:
+    Type: String
     Default:
-      EndPoint1: http://localhost:14566
-      EndPoint2: http://localstack:4566
+      Ref: Endpoint
+
+Conditions:
+  IsLocal:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: Endpoint
+          - ""
+
 Globals:
   Function:
     Handler: app.handler
     Runtime: python3.9
-    Timeout: 180
+    Timeout: 15
+    Environment:
+      Variables:
+        ENDPOINT:
+          Ref: Endpoint
+        JOB_TABLE_NAME:
+          Ref: JobTable
     Architectures:
       - x86_64
 
 Resources:
+  # IAM managed policies
+  DynamoDBAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for accessing any DynamoDB
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Scan
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+            Resource:
+              - "*"
+
+  InvokeFunctionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for invoking any Lambda function
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+            Resource:
+              - "*"
+
+  # DynamoDB tables
+  JobTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: id
+        Type: String
+      TableName:
+        Fn::If:
+          - IsLocal
+          - JobTable
+          - Ref: AWS::NoValue
+
+  # Lambda function (non-API)
+  ProcessJobFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/process_job
+      Description: Process job
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - ProcessJobFunction
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  # APIs
   HelloWorldApi:
     Type: AWS::Serverless::Api
     Properties:
       Description: Hello World REST API
       StageName: test
 
-  HelloWorldFunction:
+  DispatchJobFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/hello_world
+      CodeUri: functions/dispatch_job
+      Description: Dispatch job
       Events:
         ApiEvent:
           Type: Api
           Properties:
             Path: /
-            Method: get
+            Method: POST
             RestApiId:
               Ref: HelloWorldApi
+      Environment:
+        Variables:
+          JOB_FUNCTION_NAME:
+            Ref: ProcessJobFunction
+      Policies:
+        - Ref: InvokeFunctionPolicy
+
+  ListJobsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/list_jobs
+      Description: List jobs
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: GET
+            RestApiId:
+              Ref: HelloWorldApi
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  EmptyJobsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/empty_jobs
+      Description: Empty jobs
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /delete
+            Method: POST
+            RestApiId:
+              Ref: HelloWorldApi
+      Policies:
+        - Ref: DynamoDBAccessPolicy
 
 Outputs:
-  HelloWorldApiUrl1:
+  HelloWorldApi:
     Value:
-      Fn::Sub:
-        - "${EndPoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
-        - EndPoint:
-            Fn::FindInMap:
-              - Consts
-              - Default
-              - EndPoint1
-  HelloWorldApiUrl2:
-    Value:
-      Fn::Sub:
-        - "${EndPoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
-        - EndPoint:
-            Fn::FindInMap:
-              - Consts
-              - Default
-              - EndPoint2
+      Fn::If:
+        - IsLocal
+        - Fn::Sub: "${ApigwEndpoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
+        - Fn::Sub: "https://${HelloWorldApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${HelloWorldApi.Stage}/"
