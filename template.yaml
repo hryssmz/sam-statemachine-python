@@ -3,14 +3,21 @@ Transform: AWS::Serverless-2016-10-31
 Description: Sample SAM App
 
 Parameters:
-  Endpoint:
-    Type: String
-    Default: ""
-
   ApigwEndpoint:
     Type: String
-    Default:
-      Ref: Endpoint
+    Description: Endpoint for local API Gateway access by end user
+    Default: ""
+
+  EnvironmentType:
+    Type: String
+    Description: API Gateway deployment stage
+    Default: dev
+    AllowedValues: [dev, prod, sam]
+
+  Endpoint:
+    Type: String
+    Description: Endpoint for local AWS resource access within app
+    Default: ""
 
 Conditions:
   IsLocal:
@@ -19,17 +26,24 @@ Conditions:
           - Ref: Endpoint
           - ""
 
+  IsSam:
+    Fn::Equals:
+      - Ref: EnvironmentType
+      - sam
+
 Globals:
   Function:
     Handler: app.handler
     Runtime: python3.9
-    Timeout: 15
+    Timeout: 10
     Environment:
       Variables:
         ENDPOINT:
           Ref: Endpoint
-        JOB_TABLE_NAME:
-          Ref: JobTable
+        EXECUTION_TABLE:
+          Ref: ExecutionTable
+        LOTTERY_TABLE:
+          Ref: LotteryTable
     Architectures:
       - x86_64
 
@@ -38,7 +52,7 @@ Resources:
   DynamoDBAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for accessing any DynamoDB
+      Description: Policy for accessing DynamoDBs
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -54,7 +68,7 @@ Resources:
   InvokeFunctionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for invoking any Lambda function
+      Description: Policy for invoking Lambda functions
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -64,8 +78,21 @@ Resources:
             Resource:
               - "*"
 
+  StartExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for executing state machines
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - states:StartExecution
+            Resource:
+              - "*"
+
   # DynamoDB tables
-  JobTable:
+  ExecutionTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
       PrimaryKey:
@@ -74,86 +101,212 @@ Resources:
       TableName:
         Fn::If:
           - IsLocal
-          - JobTable
+          - ExecutionTable
           - Ref: AWS::NoValue
 
-  # Lambda function (non-API)
-  ProcessJobFunction:
+  LotteryTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: id
+        Type: String
+      TableName:
+        Fn::If:
+          - IsLocal
+          - LotteryTable
+          - Ref: AWS::NoValue
+
+  # Lambda functions
+  InitializeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/process_job
-      Description: Process job
+      CodeUri: functions/initialize
+      Description: Do initialization tasks
       FunctionName:
         Fn::If:
           - IsLocal
-          - ProcessJobFunction
+          - InitializeFunction
           - Ref: AWS::NoValue
       Policies:
         - Ref: DynamoDBAccessPolicy
 
-  # APIs
+  ProcessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/process
+      Description: Process data
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - ProcessFunction
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  FinalizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/finalize
+      Description: Do finalization tasks
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - FinalizeFunction
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  # State machines
+  LotteryStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Definition:
+        Comment: Buy some lotteries
+        StartAt: Initialize
+        States:
+          Initialize:
+            Type: Task
+            Resource: { Fn::GetAtt: InitializeFunction.Arn }
+            # Resource: arn:aws:lambda:ap-northeast-1:000000000000:function:InitializeFunction
+            Parameters:
+              amount.$: $.amount
+              executionId.$: $$.Execution.Name
+            ResultPath: $
+            Next: ProcessData
+          ProcessData:
+            Type: Map
+            ItemsPath: $.packs
+            MaxConcurrency: 2
+            Parameters:
+              pack.$: $$.Map.Item.Value
+              executionId.$: $.executionId
+            Iterator:
+              StartAt: Process
+              States:
+                Process:
+                  Type: Task
+                  Resource: { Fn::GetAtt: ProcessFunction.Arn }
+                  # Resource: arn:aws:lambda:ap-northeast-1:000000000000:function:ProcessFunction
+                  End: true
+            ResultPath: $.winnings
+            Next: Finalize
+          Finalize:
+            Type: Task
+            Resource: { Fn::GetAtt: FinalizeFunction.Arn }
+            # Resource: arn:aws:lambda:ap-northeast-1:000000000000:function:FinalizeFunction
+            End: true
+      Name:
+        Fn::If:
+          - IsLocal
+          - LotteryStateMachine
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: InvokeFunctionPolicy
+
+  # REST API
   HelloWorldApi:
     Type: AWS::Serverless::Api
     Properties:
       Description: Hello World REST API
-      StageName: test
+      Models: # doesn't work in LocalStack
+        StartExecutionInput:
+          $schema: http://json-schema.org/draft-04/schema#
+          title: StartExecutionInput
+          type: object
+          required: [amount]
+          properties:
+            amount:
+              type: integer
+      Name:
+        Fn::If:
+          - IsLocal
+          - HelloWorldApi
+          - Ref: AWS::NoValue
+      StageName:
+        Ref: EnvironmentType
 
-  DispatchJobFunction:
+  # Lambda functions (REST API)
+  ListExecutionsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/dispatch_job
-      Description: Dispatch job
+      CodeUri: functions/list_executions
+      Description: List execution
       Events:
         ApiEvent:
           Type: Api
           Properties:
+            Method: GET
             Path: /
-            Method: POST
             RestApiId:
               Ref: HelloWorldApi
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - ListExecutionsFunction
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  ListLotteriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/list_lotteries
+      Description: List lotteries
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Method: GET
+            Path: /lotteries
+            RequestParameters:
+              - method.request.querystring.execution-id
+            RestApiId:
+              Ref: HelloWorldApi
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - ListLotteriesFunction
+          - Ref: AWS::NoValue
+      Policies:
+        - Ref: DynamoDBAccessPolicy
+
+  StartExecutionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/start_execution
+      Description: Start execution
       Environment:
         Variables:
-          JOB_FUNCTION_NAME:
-            Ref: ProcessJobFunction
-      Policies:
-        - Ref: InvokeFunctionPolicy
-
-  ListJobsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/list_jobs
-      Description: List jobs
+          STATE_MACHINE_ARN:
+            Fn::If:
+              - IsSam
+              - Fn::Sub: arn:aws:states:${AWS::Region}:000000000000:stateMachine:${LotteryStateMachine}
+              - Ref: LotteryStateMachine
       Events:
         ApiEvent:
           Type: Api
           Properties:
-            Path: /
-            Method: GET
-            RestApiId:
-              Ref: HelloWorldApi
-      Policies:
-        - Ref: DynamoDBAccessPolicy
-
-  EmptyJobsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/empty_jobs
-      Description: Empty jobs
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            Path: /delete
             Method: POST
+            Path: /
+            RequestModel: # doesn't work in LocalStack
+              Model: StartExecutionInput
+              Required: true
+              ValidateBody: true
+              ValidateParameters: false
             RestApiId:
               Ref: HelloWorldApi
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - StartExecutionFunction
+          - Ref: AWS::NoValue
       Policies:
-        - Ref: DynamoDBAccessPolicy
+        - Ref: StartExecutionPolicy
 
 Outputs:
   HelloWorldApi:
     Value:
       Fn::If:
         - IsLocal
-        - Fn::Sub: "${ApigwEndpoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/"
-        - Fn::Sub: "https://${HelloWorldApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${HelloWorldApi.Stage}/"
+        - Fn::Sub: ${ApigwEndpoint}/restapis/${HelloWorldApi}/${HelloWorldApi.Stage}/_user_request_/
+        - Fn::Sub: https://${HelloWorldApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${HelloWorldApi.Stage}/

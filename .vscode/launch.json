@@ -2,11 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: Current File",
+      "name": "Debugging action.py",
       "type": "python",
       "request": "launch",
-      "program": "${file}",
-      "console": "integratedTerminal"
+      "program": "action.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/aws_lib",
+      "args": ["scan-table"],
+      "windows": {
+        "cwd": "${workspaceFolder}\\aws_lib"
+      }
     }
   ]
 }

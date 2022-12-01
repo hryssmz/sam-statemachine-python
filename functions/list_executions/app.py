@@ -1,7 +1,8 @@
-# empty_jobs/app.py
+# list_lotteries/app.py
 import json
 import logging
 import os
+from typing import Any
 
 from aws_lambda_typing.context import Context
 from aws_lambda_typing.events import APIGatewayProxyEventV1
@@ -9,7 +10,7 @@ from aws_lambda_typing.responses import APIGatewayProxyResponseV1
 import boto3
 
 ENDPOINT = os.getenv("ENDPOINT") or None
-JOB_TABLE = os.getenv("JOB_TABLE_NAME", "")
+EXECUTION_TABLE = os.getenv("EXECUTION_TABLE", "")
 
 
 def create_logger(name: str) -> logging.Logger:
@@ -18,13 +19,12 @@ def create_logger(name: str) -> logging.Logger:
     return logger
 
 
-def empty_table() -> None:
+def scan_table() -> list[Any]:
     dynamodb = boto3.resource("dynamodb", endpoint_url=ENDPOINT)
-    table = dynamodb.Table(JOB_TABLE)
+    table = dynamodb.Table(EXECUTION_TABLE)
     response = table.scan()
-    items = response["Items"]
-    for item in items:
-        table.delete_item(Key={"id": item["id"]})
+    items: list[Any] = response["Items"]
+    return items
 
 
 def handler(
@@ -33,11 +33,11 @@ def handler(
     logger = create_logger(context.function_name)
     logger.info(f"Lambda function started: {context.function_name}")
 
-    empty_table()
+    items = scan_table()
     response: APIGatewayProxyResponseV1 = {
         "statusCode": 200,
         "headers": {},
-        "body": json.dumps({}),
+        "body": json.dumps(items),
         "multiValueHeaders": {},
         "isBase64Encoded": False,
     }

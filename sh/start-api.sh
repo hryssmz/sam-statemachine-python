@@ -14,4 +14,7 @@ sam local start-api \
     --docker-network "${DOCKER_NETWORK}" \
     --docker-volume-basedir "${BASEDIR}/.aws-sam/build" \
     --env-vars "${ENV_PATH}" \
-    --parameter-overrides "ParameterKey=Endpoint,ParameterValue='${ENDPOINT}'"
+    --parameter-overrides \
+        "ParameterKey=Endpoint,ParameterValue=${ENDPOINT}" \
+        "ParameterKey=EnvironmentType,ParameterValue=sam" \
+    --region ap-northeast-1

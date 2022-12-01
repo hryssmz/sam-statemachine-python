@@ -5,7 +5,7 @@ DOCKER_NETWORK="localstack_network"
 ENDPOINT="http://localstack:4566"
 ENV_PATH="envs/env.json"
 EVENT_PATH="events/event.json"
-FUNCTION_ID="ListJobsFunction"
+FUNCTION_ID="ListExecutionsFunction"
 
 sam local invoke "${FUNCTION_ID}" \
     --container-host "${CONTAINER_HOST}" \
@@ -14,4 +14,7 @@ sam local invoke "${FUNCTION_ID}" \
     --docker-volume-basedir "${BASEDIR}/.aws-sam/build" \
     --event "${EVENT_PATH}" \
     --env-vars "${ENV_PATH}" \
-    --parameter-overrides "ParameterKey=Endpoint,ParameterValue='${ENDPOINT}'"
+    --parameter-overrides \
+        "ParameterKey=Endpoint,ParameterValue=${ENDPOINT}" \
+        "ParameterKey=EnvironmentType,ParameterValue=sam" \
+    --region ap-northeast-1

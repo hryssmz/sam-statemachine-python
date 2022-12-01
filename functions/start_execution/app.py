@@ -1,4 +1,4 @@
-# list_jobs/app.py
+# start_execution/app.py
 import json
 import logging
 import os
@@ -10,7 +10,7 @@ from aws_lambda_typing.responses import APIGatewayProxyResponseV1
 import boto3
 
 ENDPOINT = os.getenv("ENDPOINT") or None
-JOB_TABLE = os.getenv("JOB_TABLE_NAME", "")
+STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN", "")
 
 
 def create_logger(name: str) -> logging.Logger:
@@ -19,12 +19,20 @@ def create_logger(name: str) -> logging.Logger:
     return logger
 
 
-def scan_table() -> list[Any]:
-    dynamodb = boto3.resource("dynamodb", endpoint_url=ENDPOINT)
-    table = dynamodb.Table(JOB_TABLE)
-    response = table.scan()
-    items: list[Any] = response["Items"]
-    return items
+def start_execution(input: str) -> dict[str, str]:
+    client = boto3.client("stepfunctions", endpoint_url=ENDPOINT)
+    response: dict[str, Any] = client.start_execution(
+        stateMachineArn=STATE_MACHINE_ARN, input=input
+    )
+
+    execution_arn: str = response["executionArn"]
+    execution_name = execution_arn.split(":")[-1]
+
+    return {
+        "execution_arn": execution_arn,
+        "execution_name": execution_name,
+        "start_date": response["startDate"].isoformat(),
+    }
 
 
 def handler(
@@ -33,11 +41,11 @@ def handler(
     logger = create_logger(context.function_name)
     logger.info(f"Lambda function started: {context.function_name}")
 
-    items = scan_table()
+    execution_info = start_execution(event["body"])
     response: APIGatewayProxyResponseV1 = {
         "statusCode": 200,
         "headers": {},
-        "body": json.dumps(items),
+        "body": json.dumps(execution_info),
         "multiValueHeaders": {},
         "isBase64Encoded": False,
     }

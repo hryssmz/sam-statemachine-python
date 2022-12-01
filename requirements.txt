@@ -6,4 +6,6 @@ flake8
 isort
 jmespath
 mypy
+requests
 types-jmespath
+types-requests

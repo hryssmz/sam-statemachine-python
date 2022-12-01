@@ -9,4 +9,7 @@ sam local start-api ^
     --port %PORT% ^
     --docker-network %DOCKER_NETWORK% ^
     --env-vars %ENV_PATH% ^
-    --parameter-overrides ParameterKey=Endpoint,ParameterValue=%ENDPOINT%
+    --parameter-overrides ^
+        ParameterKey=Endpoint,ParameterValue=%ENDPOINT% ^
+        ParameterKey=EnvironmentType,ParameterValue=sam ^
+    --region ap-northeast-1
