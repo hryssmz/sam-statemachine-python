@@ -1,8 +1,8 @@
-# list_loterries/app.py
+# empty_tables/app.py
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 
@@ -13,12 +13,21 @@ def create_logger(name: str) -> logging.Logger:
     return logger
 
 
-def scan_table() -> list[dict[str, Any]]:
+def empty_tables() -> list[str]:
+    table_names = [
+        os.getenv("EXECUTION_TABLE", ""),
+        os.getenv("LOTTERY_TABLE", ""),
+    ]
     endpoint_url = os.getenv("ENDPOINT") or None
     dynamodb = boto3.resource("dynamodb", endpoint_url=endpoint_url)
-    table = dynamodb.Table(os.getenv("LOTTERY_TABLE", ""))
-    items: list[dict[str, Any]] = table.scan()["Items"]
-    return items
+
+    for table_name in table_names:
+        table = dynamodb.Table(table_name)
+        items = table.scan()["Items"]
+        for item in items:
+            table.delete_item(Key={"id": item["id"]})
+
+    return table_names
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -26,17 +35,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     logger.info(f"Lambda function started: {context.function_name}")
     logger.info(f"Lambda event: {event}")
 
-    query_params: Optional[dict[str, str]] = event["queryStringParameters"]
-    items = scan_table()
-
-    if query_params is not None and "execution-id" in query_params:
-        execution_id = query_params["execution-id"]
-        items = [item for item in items if item["executionId"] == execution_id]
-
+    table_names = empty_tables()
     response = {
         "statusCode": 200,
         "headers": {},
-        "body": json.dumps(items),
+        "body": json.dumps(table_names),
         "multiValueHeaders": {},
         "isBase64Encoded": False,
     }

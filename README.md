@@ -69,7 +69,7 @@ Outputs
 --------------------------------------------------------------------------------
 Key                 HelloWorldApi
 Description         -
-Value               http://localhost:4566/restapis/yoikxuk77m/test/_user_request_/
+Value               http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/
 --------------------------------------------------------------------------------
 
 Successfully created/updated stack - samlocal-python in ap-northeast-1
@@ -78,12 +78,12 @@ Successfully created/updated stack - samlocal-python in ap-northeast-1
 `curl` コマンドで `Outputs` で表示されている API Gateway のエンドポイントにリクエストを送る。（`yoikxuk77m` の部分は各自で得られたものに置き換える）
 
 ```bat
-curl -s http://localhost:4566/restapis/yoikxuk77m/test/_user_request_/
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/
 ```
 
 以下のように空の JSON 配列が得られれば成功。
 
-```json
+```log
 []
 ```
 
@@ -100,6 +100,162 @@ bat\invoke.bat
 以下のように `"statusCode": 200` が表示されていたら成功。
 
 ```log
-{"statusCode": 200, "headers": {}, "body": "[]", "multiValueHeaders": {}, "isBase64Encoded": false}END RequestId: 73fd1e78-f006-4cc5-8211-40381361e09a
-REPORT RequestId: 73fd1e78-f006-4cc5-8211-40381361e09a  Init Duration: 0.10 ms  Duration: 339.60 ms Billed Duration: 340 ms Memory Size: 128 MB     Max Memory Used: 128 MB
+{"statusCode": 200, "headers": {}, "body": "[]", "multiValueHeaders": {}, "isBase64Encoded": false}
+```
+
+## 2. API 一覧
+
+---
+
+### 2.1. 実行状況一覧取得
+
+---
+
+実行例:
+
+```bat
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/
+```
+
+JSON 出力:
+
+```json
+[
+  {
+    "startedAt": "2022-12-01T22:01:51.891498+00:00",
+    "amount": "2",
+    "id": "161df506-ce3c-48be-bb32-8ce7a177824f",
+    "status": "pending"
+  },
+  {
+    "startedAt": "2022-12-01T22:01:15.305990+00:00",
+    "amount": "3",
+    "id": "4ac83be2-6acc-4122-a04b-0f407dda79ea",
+    "winnings": "[]",
+    "finishedAt": "2022-12-01T22:01:21.687656+00:00",
+    "status": "success"
+  }
+]
+```
+
+### 2.2. くじデータ一覧取得
+
+---
+
+実行例 1:
+
+```bat
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/lotteries/
+```
+
+JSON 出力 1:
+
+```json
+[
+  {
+    "executionId": "4ac83be2-6acc-4122-a04b-0f407dda79ea",
+    "number": "3",
+    "createdAt": "2022-12-01T22:01:20.173598+00:00",
+    "id": "26afab65-6d07-4efa-8362-50d9f5453e5d",
+    "code": "9",
+    "winning": "0"
+  },
+  {
+    "executionId": "4ac83be2-6acc-4122-a04b-0f407dda79ea",
+    "number": "2",
+    "createdAt": "2022-12-01T22:01:19.126099+00:00",
+    "id": "c5ef4cbd-d89e-4a99-bea9-28d280fb9ae8",
+    "code": "9",
+    "winning": "0"
+  },
+  {
+    "executionId": "161df506-ce3c-48be-bb32-8ce7a177824f",
+    "number": "1",
+    "createdAt": "2022-12-01T22:01:54.558367+00:00",
+    "id": "91f5571b-4cf4-45f4-a32b-b5183d975ad1",
+    "code": "5",
+    "winning": "0"
+  },
+  {
+    "executionId": "161df506-ce3c-48be-bb32-8ce7a177824f",
+    "number": "2",
+    "createdAt": "2022-12-01T22:01:57.634293+00:00",
+    "id": "84d785c0-9aa6-4bf4-9155-3715d83ed614",
+    "code": "2",
+    "winning": "0"
+  },
+  {
+    "executionId": "4ac83be2-6acc-4122-a04b-0f407dda79ea",
+    "number": "1",
+    "createdAt": "2022-12-01T22:01:17.930292+00:00",
+    "id": "6174f80f-e62f-4349-bd0d-1e79bbfc81d7",
+    "code": "1",
+    "winning": "0"
+  }
+]
+```
+
+実行例 2:
+
+```bat
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/lotteries/?execution-id=161df506-ce3c-48be-bb32-8ce7a177824f
+```
+
+JSON 出力 2:
+
+```json
+[
+  {
+    "executionId": "161df506-ce3c-48be-bb32-8ce7a177824f",
+    "number": "1",
+    "createdAt": "2022-12-01T22:01:54.558367+00:00",
+    "id": "91f5571b-4cf4-45f4-a32b-b5183d975ad1",
+    "code": "5",
+    "winning": "0"
+  },
+  {
+    "executionId": "161df506-ce3c-48be-bb32-8ce7a177824f",
+    "number": "2",
+    "createdAt": "2022-12-01T22:01:57.634293+00:00",
+    "id": "84d785c0-9aa6-4bf4-9155-3715d83ed614",
+    "code": "2",
+    "winning": "0"
+  }
+]
+```
+
+### 2.3. 新しく実行を開始
+
+---
+
+実行例:
+
+```bat
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/ -H "Content-Type: application/json" -d "{\"amount\": 2}" -X POST
+```
+
+JSON 出力:
+
+```json
+{
+  "execution_arn": "arn:aws:states:ap-northeast-1:000000000000:execution:LotteryStateMachine:161df506-ce3c-48be-bb32-8ce7a177824f",
+  "execution_name": "161df506-ce3c-48be-bb32-8ce7a177824f",
+  "start_date": "2022-12-01T22:01:50.766000+00:00"
+}
+```
+
+### 2.4. データを削除
+
+---
+
+実行例:
+
+```bat
+curl -s http://localhost:4566/restapis/yoikxuk77m/dev/_user_request_/empty/ -X POST
+```
+
+JSON 出力:
+
+```json
+["ExecutionTable", "LotteryTable"]
 ```

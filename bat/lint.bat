@@ -1,7 +1,6 @@
 @echo off
 
-call :lint functions
-call :lint aws_lib
+call :lint .
 exit /B 0
 
 :lint

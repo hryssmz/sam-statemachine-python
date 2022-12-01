@@ -5,13 +5,10 @@ import os
 import random
 from typing import Any
 
-from aws_lambda_typing.context import Context
 import boto3
 
 MAX_BLOCK_SIZE = 5
-MAX_AMOUNT = 20
-ENDPOINT = os.getenv("ENDPOINT") or None
-EXECUTION_TABLE = os.getenv("EXECUTION_TABLE", "")
+MAX_AMOUNT = 30
 
 
 def create_logger(name: str) -> logging.Logger:
@@ -26,14 +23,16 @@ def now_isoformat() -> str:
 
 
 def put_item(item: dict[str, str]) -> None:
-    dynamodb = boto3.resource("dynamodb", endpoint_url=ENDPOINT)
-    table = dynamodb.Table(EXECUTION_TABLE)
+    endpoint_url = os.getenv("ENDPOINT") or None
+    dynamodb = boto3.resource("dynamodb", endpoint_url=endpoint_url)
+    table = dynamodb.Table(os.getenv("EXECUTION_TABLE", ""))
     table.put_item(Item=item)
 
 
-def handler(event: dict[str, Any], context: Context) -> dict[str, Any]:
+def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     logger = create_logger(context.function_name)
     logger.info(f"Lambda function started: {context.function_name}")
+    logger.info(f"Lambda event: {event}")
 
     amount: int = event["amount"]
     execution_id: str = event["executionId"]

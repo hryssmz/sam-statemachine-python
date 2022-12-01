@@ -5,7 +5,11 @@ boto3
 flake8
 isort
 jmespath
+jsonschema
 mypy
+pytest
+pytest-cov
+pytest-mock
 requests
 types-jmespath
 types-requests

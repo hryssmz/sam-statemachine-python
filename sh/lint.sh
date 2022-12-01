@@ -34,5 +34,4 @@ lint() {
     fi
 }
 
-lint functions
-lint aws_lib
+lint .

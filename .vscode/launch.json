@@ -12,6 +12,14 @@
       "windows": {
         "cwd": "${workspaceFolder}\\aws_lib"
       }
+    },
+    {
+      "name": "pytest single method",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-k", "test_list_executions"],
+      "justMyCode": true
     }
   ]
 }

@@ -6,10 +6,10 @@ from typing import Any
 import boto3
 from config import DEFAULT_CLIENT_CONFIG
 import jmespath
-from json_utils import convert
+from utils.json_utils import convert
 
 STATE_MACHINE_NAME = "LotteryStateMachine"
-EXECUTION_NAME = "a80918a7-0aac-44bc-8d69-c5833919d438"
+EXECUTION_NAME = "0671bfa8-5160-4573-bb54-0d63e1613ec4"
 
 ARN_PREFIX = "arn:aws:states:ap-northeast-1:000000000000"
 STATE_MACHINE_ARN = "{}:stateMachine:{}".format(ARN_PREFIX, STATE_MACHINE_NAME)
@@ -36,6 +36,13 @@ def format_execution_history(response: Any) -> list[Any]:
         }
         for item in items
     ]
+
+
+def describe_execution() -> str:
+    client = boto3.client("stepfunctions", **CONFIG)
+    response = client.describe_execution(executionArn=EXECUTION_ARN)
+    result = jmespath.search("@", convert(response))
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def get_execution_history() -> str:
@@ -83,6 +90,7 @@ def list_state_machines_arn() -> str:
 
 
 SFN_ACTIONS: dict[str, Callable[[], str]] = {
+    "describe_execution": describe_execution,
     "get_execution_history": get_execution_history,
     "last_execution": last_execution,
     "list_executions": list_executions,

@@ -5,7 +5,7 @@ import json
 import boto3
 from config import DEFAULT_CLIENT_CONFIG
 import jmespath
-from json_utils import convert
+from utils.json_utils import convert
 
 TABLE_NAME = "LotteryTable"
 CONFIG = {**DEFAULT_CLIENT_CONFIG}

@@ -40,57 +40,10 @@ Globals:
       Variables:
         ENDPOINT:
           Ref: Endpoint
-        EXECUTION_TABLE:
-          Ref: ExecutionTable
-        LOTTERY_TABLE:
-          Ref: LotteryTable
     Architectures:
       - x86_64
 
 Resources:
-  # IAM managed policies
-  DynamoDBAccessPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      Description: Policy for accessing DynamoDBs
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - dynamodb:Scan
-              - dynamodb:PutItem
-              - dynamodb:UpdateItem
-              - dynamodb:DeleteItem
-            Resource:
-              - "*"
-
-  InvokeFunctionPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      Description: Policy for invoking Lambda functions
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - lambda:InvokeFunction
-            Resource:
-              - "*"
-
-  StartExecutionPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      Description: Policy for executing state machines
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - states:StartExecution
-            Resource:
-              - "*"
-
   # DynamoDB tables
   ExecutionTable:
     Type: AWS::Serverless::SimpleTable
@@ -122,39 +75,45 @@ Resources:
     Properties:
       CodeUri: functions/initialize
       Description: Do initialization tasks
+      Environment:
+        Variables:
+          EXECUTION_TABLE:
+            Ref: ExecutionTable
       FunctionName:
         Fn::If:
           - IsLocal
           - InitializeFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: DynamoDBAccessPolicy
 
   ProcessFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/process
       Description: Process data
+      Environment:
+        Variables:
+          LOTTERY_TABLE:
+            Ref: LotteryTable
       FunctionName:
         Fn::If:
           - IsLocal
           - ProcessFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: DynamoDBAccessPolicy
 
   FinalizeFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/finalize
       Description: Do finalization tasks
+      Environment:
+        Variables:
+          EXECUTION_TABLE:
+            Ref: ExecutionTable
       FunctionName:
         Fn::If:
           - IsLocal
           - FinalizeFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: DynamoDBAccessPolicy
 
   # State machines
   LotteryStateMachine:
@@ -200,8 +159,16 @@ Resources:
           - IsLocal
           - LotteryStateMachine
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: InvokeFunctionPolicy
+      Policies: # LocalStack only supports policy template
+        - LambdaInvokePolicy:
+            FunctionName:
+              Ref: InitializeFunction
+        - LambdaInvokePolicy:
+            FunctionName:
+              Ref: ProcessFunction
+        - LambdaInvokePolicy:
+            FunctionName:
+              Ref: FinalizeFunction
 
   # REST API
   HelloWorldApi:
@@ -231,6 +198,10 @@ Resources:
     Properties:
       CodeUri: functions/list_executions
       Description: List execution
+      Environment:
+        Variables:
+          EXECUTION_TABLE:
+            Ref: ExecutionTable
       Events:
         ApiEvent:
           Type: Api
@@ -244,14 +215,16 @@ Resources:
           - IsLocal
           - ListExecutionsFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: DynamoDBAccessPolicy
 
   ListLotteriesFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/list_lotteries
       Description: List lotteries
+      Environment:
+        Variables:
+          LOTTERY_TABLE:
+            Ref: LotteryTable
       Events:
         ApiEvent:
           Type: Api
@@ -267,8 +240,6 @@ Resources:
           - IsLocal
           - ListLotteriesFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: DynamoDBAccessPolicy
 
   StartExecutionFunction:
     Type: AWS::Serverless::Function
@@ -300,8 +271,108 @@ Resources:
           - IsLocal
           - StartExecutionFunction
           - Ref: AWS::NoValue
-      Policies:
-        - Ref: StartExecutionPolicy
+      Policies: # LocalStack only supports policy template
+        - StepFunctionsExecutionPolicy:
+            StateMachineName:
+              Fn::GetAtt: LotteryStateMachine.Name
+
+  EmptyTablesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/empty_tables
+      Description: Empty tables
+      Environment:
+        Variables:
+          EXECUTION_TABLE:
+            Ref: ExecutionTable
+          LOTTERY_TABLE:
+            Ref: LotteryTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Method: POST
+            Path: /empty
+            RestApiId:
+              Ref: HelloWorldApi
+      FunctionName:
+        Fn::If:
+          - IsLocal
+          - EmptyTablesFunction
+          - Ref: AWS::NoValue
+
+  # Permissions
+  InitializeFunctionExecutionTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: InitializeFunction
+      Destination:
+        Id: ExecutionTable
+      Permissions:
+        - Write
+
+  ProcessFunctionLotteryTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: ProcessFunction
+      Destination:
+        Id: LotteryTable
+      Permissions:
+        - Write
+
+  FinalizeFunctionExecutionTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: FinalizeFunction
+      Destination:
+        Id: ExecutionTable
+      Permissions:
+        - Write
+
+  ListExecutionsFunctionExecutionTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: ListExecutionsFunction
+      Destination:
+        Id: ExecutionTable
+      Permissions:
+        - Read
+
+  ListLotteriesFunctionLotteryTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: ListLotteriesFunction
+      Destination:
+        Id: LotteryTable
+      Permissions:
+        - Read
+
+  EmptyTablesFunctionExecutionTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: EmptyTablesFunction
+      Destination:
+        Id: ExecutionTable
+      Permissions:
+        - Read
+        - Write
+
+  EmptyTablesFunctionLotteryTableConnector:
+    Type: AWS::Serverless::Connector
+    Properties:
+      Source:
+        Id: EmptyTablesFunction
+      Destination:
+        Id: LotteryTable
+      Permissions:
+        - Read
+        - Write
 
 Outputs:
   HelloWorldApi:

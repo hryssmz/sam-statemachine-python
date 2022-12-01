@@ -1,16 +1,10 @@
-# list_lotteries/app.py
+# list_executions/app.py
 import json
 import logging
 import os
 from typing import Any
 
-from aws_lambda_typing.context import Context
-from aws_lambda_typing.events import APIGatewayProxyEventV1
-from aws_lambda_typing.responses import APIGatewayProxyResponseV1
 import boto3
-
-ENDPOINT = os.getenv("ENDPOINT") or None
-EXECUTION_TABLE = os.getenv("EXECUTION_TABLE", "")
 
 
 def create_logger(name: str) -> logging.Logger:
@@ -19,22 +13,21 @@ def create_logger(name: str) -> logging.Logger:
     return logger
 
 
-def scan_table() -> list[Any]:
-    dynamodb = boto3.resource("dynamodb", endpoint_url=ENDPOINT)
-    table = dynamodb.Table(EXECUTION_TABLE)
-    response = table.scan()
-    items: list[Any] = response["Items"]
+def scan_table() -> list[dict[str, Any]]:
+    endpoint_url = os.getenv("ENDPOINT") or None
+    dynamodb = boto3.resource("dynamodb", endpoint_url=endpoint_url)
+    table = dynamodb.Table(os.getenv("EXECUTION_TABLE", ""))
+    items: list[dict[str, Any]] = table.scan()["Items"]
     return items
 
 
-def handler(
-    event: APIGatewayProxyEventV1, context: Context
-) -> APIGatewayProxyResponseV1:
+def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     logger = create_logger(context.function_name)
     logger.info(f"Lambda function started: {context.function_name}")
+    logger.info(f"Lambda event: {event}")
 
     items = scan_table()
-    response: APIGatewayProxyResponseV1 = {
+    response = {
         "statusCode": 200,
         "headers": {},
         "body": json.dumps(items),
